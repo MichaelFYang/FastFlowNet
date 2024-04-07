@@ -180,3 +180,80 @@ class FastFlowNet(nn.Module):
             return flow2, flow3, flow4, flow5, flow6
         else:
             return flow2
+        
+if __name__ == '__main__':
+    import cv2
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    env_root = "/media/fanyang/TartanAir/abandonedfactory/Easy/P000/"
+    model_path = "checkpoints/fastflownet_ft_mix.pth"
+    
+    idx = 12 # format: 000000
+    # env_root + idx + "_left.png"
+    img1_path = os.path.join(env_root, 'image_left', f"{str(idx).zfill(6)}_left.png")
+    img2_path = os.path.join(env_root, 'image_left', f"{str(idx+1).zfill(6)}_left.png")
+    # Load your images
+    image1 = torch.from_numpy(cv2.imread(img1_path)).float().permute(2, 0, 1) / 255.0
+    image2 = torch.from_numpy(cv2.imread(img2_path)).float().permute(2, 0, 1) / 255.0
+    
+    H, W = image1.shape[-2:]
+    # concatenate the images
+    input_t = torch.cat([image1, image2], 0) # 6, H, W
+    input_t = input_t.unsqueeze(0) # B, C, H, W
+    print(input_t.shape)
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # check for model size with fake input
+    model = FastFlowNet().eval()
+    # load pretrained model
+    if os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path))
+    else:
+        print('Pretrained model not found at {}'.format(model_path))
+        
+    # crop the input size to be divisible by 64 from the center of the image
+    h_a = 64 * (H // 64)
+    w_a = 64 * (W // 64)
+    input_t = input_t[:, :, (H-h_a)//2:(H+h_a)//2, (W-w_a)//2:(W+w_a)//2]
+    input_size = (h_a, w_a)
+    print(input_t.shape)
+    
+    # put everything on the same device
+    model = model.to(device)
+    input_t = input_t.to(device)
+    
+    with torch.no_grad():
+        output_t = model(input_t)
+    print(output_t.shape)
+    print('Number of parameters: {:.2f} M'.format(sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6))
+    
+    # ground truth flow
+    gt_flow_path = os.path.join(env_root, 'flow', f"{str(idx).zfill(6)}_{str(idx+1).zfill(6)}_flow.npy")
+    gt_flow = np.load(gt_flow_path)
+    
+    # visualize the flow and ground truth
+    def visualize_flow(pred_flow, gt_flow):
+        # Convert to numpy arrays for plotting
+        pred_flow = pred_flow
+        gt_flow = gt_flow
+        
+        # Plotting
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        
+        # Plot predicted flow
+        axes[0].imshow(pred_flow[:,:,0], cmap='gray')
+        axes[0].set_title('Predicted Flow')
+        
+        # Plot ground truth flow
+        axes[1].imshow(gt_flow[:,:,0], cmap='gray')
+        axes[1].set_title('Ground Truth Flow')
+        
+        plt.show()
+    
+    # Resize the output to the original size
+    div_flow = 20.0
+    pred_flow = div_flow * F.interpolate(output_t, size=input_size, mode='bilinear', align_corners=False)
+    viz_flow = pred_flow[0].cpu().permute(1, 2, 0).numpy()
+    visualize_flow(viz_flow, gt_flow)

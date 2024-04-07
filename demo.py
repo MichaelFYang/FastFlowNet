@@ -1,8 +1,10 @@
 import numpy as np
 import cv2
+import os
 import torch
 import torch.nn.functional as F
-from models.FastFlowNet import FastFlowNet
+# from models.FastFlowNet import FastFlowNet
+from models.FastFlowNet_v2 import FastFlowNet
 from flow_vis import flow_to_color
 
 div_flow = 20.0
@@ -20,8 +22,11 @@ model.load_state_dict(torch.load('./checkpoints/fastflownet_ft_mix.pth'))
 # img2_path = './data/img_051.jpg'
 # img1_path = './data/frame_0006.png'
 # img2_path = './data/frame_0007.png'
-img1_path = './data/000038_10.png'
-img2_path = './data/000038_11.png'
+env_root = "/media/fanyang/TartanAir/abandonedfactory/Easy/P000/"
+idx = 0 # format: 000000
+# env_root + idx + "_left.png"
+img1_path = os.path.join(env_root, 'image_left', f"{str(idx).zfill(6)}_left.png")
+img2_path = os.path.join(env_root, 'image_left', f"{str(idx+1).zfill(6)}_left.png")
 
 img1 = torch.from_numpy(cv2.imread(img1_path)).float().permute(2, 0, 1).unsqueeze(0)/255.0
 img2 = torch.from_numpy(cv2.imread(img2_path)).float().permute(2, 0, 1).unsqueeze(0)/255.0
